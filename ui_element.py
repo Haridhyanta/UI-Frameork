@@ -14,7 +14,8 @@ class UiElement:
         return self
 
     def build(self, parent_rect: pg.Rect | None = None):
-        ...
+        if parent_rect is None:
+            self.rect = pg.Rect((0, 0), pg.display.get_window_size())
         for child in self.children:
             child.build(self.rect)
 
@@ -106,10 +107,10 @@ class Text(RectangleElement):
         **kwargs: str
     ):
         super().__init__(**kwargs)
-        self.attributes['text'] = text
-        self.attributes['text_color'] = text_color
-        self.attributes['font_path'] = font_path
-        self.attributes['font_size'] = font_size
+        self.attributes["text"] = text
+        self.attributes["text_color"] = text_color
+        self.attributes["font_path"] = font_path
+        self.attributes["font_size"] = font_size
 
         self.text: str = text
         self.font: pg.font.Font = pg.font.Font(font_path, size_to_int(font_size, 100))
@@ -123,7 +124,9 @@ class Text(RectangleElement):
         font_path = self.attributes.get("font_path", pg.font.get_default_font())
         font_size = self.attributes.get("font_size", "32px")
         text_color = self.attributes.get("text_color", "#000000")
-        self.font: pg.font.Font = pg.font.Font(font_path, size_to_int(font_size, parent_rect.w))
+        self.font: pg.font.Font = pg.font.Font(
+            font_path, size_to_int(font_size, parent_rect.w)
+        )
         self.text_color: pg.Color = pg.Color(text_color)
 
         return super().build(parent_rect)
@@ -134,6 +137,7 @@ class Text(RectangleElement):
         text_rect = text_sprite.get_rect()
         text_rect.center = self.rect.center
         surface.blit(text_sprite, text_rect)
+
 
 def size_to_int(size_type: str, parent_axis: int) -> int:
     if size_type == "match_parent":
