@@ -1,28 +1,32 @@
+from abc import ABC, abstractmethod
 from typing import Self
 
 import pygame as pg
 
 
-class UiElement:
+class UiElement(ABC):
     def __init__(self, **kwargs: str):
         self.attributes: dict[str, str] = kwargs
         self.children: list[UiElement] = []
         self.rect: pg.Rect = pg.Rect(0, 0, 0, 0)
+        self.should_draw_self: bool = True
+        self.should_draw_children: bool = True
 
     def add_children(self, *args):
         self.children.extend(args)
         return self
 
+    @abstractmethod
     def build(self, parent_rect: pg.Rect | None = None):
-        if parent_rect is None:
-            self.rect = pg.Rect((0, 0), pg.display.get_window_size())
         for child in self.children:
             child.build(self.rect)
 
         return self
 
+    @abstractmethod
     def draw(self, surface: pg.Surface) -> None:
-        ...
+        if not self.should_draw_children:
+            return
         for child in self.children:
             child.draw(surface)
 
@@ -38,6 +42,8 @@ class RectangleElement(UiElement):
         self.border_top_right_radius: int = -1
         self.border_bottom_left_radius: int = -1
         self.border_bottom_right_radius: int = -1
+        self.should_draw_self: bool = True
+        self.should_draw_children: bool = True
 
     def build(self, parent_rect: pg.Rect | None = None):
         if parent_rect is None:
@@ -66,10 +72,15 @@ class RectangleElement(UiElement):
         self.border_color: pg.Color = pg.Color(
             self.attributes.get("border_color", "#000000")
         )
+        self.should_draw_self = (False if self.attributes.get("draw_self", "True") == "False" else True)
+        self.should_draw_children = (False if self.attributes.get("draw_children", "True") == "False" else True)
 
         return super().build(parent_rect)
 
     def draw(self, surface: pg.Surface) -> None:
+        if not self.should_draw_self:
+            return super().draw(surface)
+
         pg.draw.rect(
             surface,
             self.color,
