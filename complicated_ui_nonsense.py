@@ -10,6 +10,7 @@ import pygame as pg
 class SpecialFunction:
     input_ids: tuple
     func: Callable
+    skip_if_no_input_change: bool=True
 
     def __call__(self, *args) -> Any:
         return self.func(*args)
@@ -18,16 +19,45 @@ class SpecialFunction:
 class Node:
     val: Any
     func: SpecialFunction
+    was_modified: bool=True
 
 @dataclasses.dataclass
 class Tree:
     nodes: dict[str, Node]
     outputs: list[SpecialFunction]
+    root_ids: list[str]
 
-    def build(self, *, max_no_of_loops: int=10, debug: bool=False, **kwargs: Any) -> None:
+    @classmethod
+    def new(cls, nodes: dict[str, Node], outputs: list[SpecialFunction]):
+        root_ids: list[str] = []
+        for node_id, node in nodes.items():
+            if node.func.input_ids:
+                continue
+
+            root_ids.append(node_id)
+
+        return cls(nodes, outputs, root_ids)
+
+    def build_init(self, *, max_no_of_loops: int=10, debug: bool=False, **kwargs: Any): 
+        return self.build(max_no_of_loops=max_no_of_loops, debug=debug, init=True, **kwargs)
+
+    def build(self, *, max_no_of_loops: int=10, debug: bool=False, init: bool=False, **kwargs: Any) -> None:
         built_node_ids: list[str] = []
 
         i = 0
+
+        for root_node_id in self.root_ids:
+            root_node = self.nodes[root_node_id]
+            new_val = root_node.func()
+
+            if new_val == root_node.val:
+                root_node.was_modified = False
+            else:
+                root_node.val = new_val
+                root_node.was_modified = True
+
+            built_node_ids.append(root_node_id)
+
         for _ in range(0, max_no_of_loops):
             done: bool = True
             for node_id, node in self.nodes.items():
@@ -37,7 +67,26 @@ class Tree:
                 i += 1
                 done = False
 
+                for input_id in node.func.input_ids:
+                    if input_id not in built_node_ids:
+                        can_optimise = False
+                        continue
+
                 args = []
+                can_optimise: bool = node.func.skip_if_no_input_change and not init
+                if can_optimise:
+                    for input_id in node.func.input_ids:
+                        if self.nodes[input_id].was_modified:
+                            can_optimise = False
+                            break
+
+                    if can_optimise:
+                        node.was_modified = False
+                        built_node_ids.append(node_id)
+                        if debug:
+                            print(f"SKIPPED BUILDING {node_id}")
+                        continue
+
                 for input_id in node.func.input_ids:
                     if input_id not in built_node_ids:
                         break
@@ -47,7 +96,7 @@ class Tree:
                     node.val = node.func(*args)
                     built_node_ids.append(node_id)
                     if debug:
-                        print(f"BUILT {node_id}, NEW_VALUE = {node.val}")
+                        print(f"BUILT {node_id}, NEW_VALUE = {node.val}, INPUTS = {node.func.input_ids}, {args=}")
 
             if done:
                 break
@@ -100,13 +149,13 @@ class UIRect(UIElement):
                 f'{self.id}#left', Node(self.rect.x, SpecialFunction((), lambda: self.rect.x)),
             ),
             (
-                f'{self.id}#right', Node(self.rect.right, SpecialFunction((), lambda: self.rect.right)),
+                f'{self.id}#top', Node(self.rect.right, SpecialFunction((), lambda: self.rect.top)),
             ),
             (
-                f'{self.id}#top', Node(self.rect.top, SpecialFunction((), lambda: self.rect.top)),
+                f'{self.id}#width', Node(self.rect.top, SpecialFunction((), lambda: self.rect.w)),
             ),
             (
-                f'{self.id}#bottom', Node(self.rect.bottom, SpecialFunction((), lambda: self.rect.bottom)),
+                f'{self.id}#height', Node(self.rect.bottom, SpecialFunction((), lambda: self.rect.h)),
             ),
         ]
 
@@ -128,10 +177,10 @@ def rect_x_align(token: str, ui_element: UIElement) -> SpecialFunction:
         return SpecialFunction((ui_element.parent_id+"#left",), left_align)
 
     if token == 'right':
-        def right_align(right):
-            ui_element.rect.right = right
-            return right
-        return SpecialFunction((ui_element.parent_id+"#right",), right_align)
+        def right_align(left, width):
+            ui_element.rect.right = left + width
+            return ui_element.rect.right
+        return SpecialFunction((ui_element.parent_id+"#left", ui_element.parent_id+"#width"), right_align)
 
     raise ValueError("Unknown \"x-align\" value, \"{token}\"")
 
@@ -144,10 +193,10 @@ def rect_y_align(token: str, ui_element: UIElement) -> SpecialFunction:
         return SpecialFunction((ui_element.parent_id+"#top",), top_align)
 
     if token == 'bottom':
-        def bottom_align(bottom):
-            ui_element.rect.bottom = bottom
-            return bottom
-        return SpecialFunction((ui_element.parent_id+"#bottom",), bottom_align)
+        def bottom_align(top, height):
+            ui_element.rect.bottom = top+height
+            return ui_element.rect.bottom
+        return SpecialFunction((ui_element.parent_id+"#top", ui_element.parent_id+"#height"), bottom_align)
 
     raise ValueError("Unknown \"x-align\" value, \"{token}\"")
 
@@ -198,7 +247,7 @@ class UI:
     ui_elements: list[UIElement]
 
     @classmethod
-    def init(cls, definition: str, left: Callable[[], int], right: Callable[[], int], width: Callable[[], int], height: Callable[[], int]) -> Self:
+    def init(cls, definition: str, left: Callable[[], int], top: Callable[[], int], width: Callable[[], int], height: Callable[[], int]) -> Self:
         tokens: list[str] = []
         last_token: str = ''
 
@@ -224,7 +273,7 @@ class UI:
         ui_elements: list[UIElement] = []
         nodes: dict[str, Node] = {
             '#left': Node(0, SpecialFunction((), left)),
-            '#right': Node(0, SpecialFunction((), right)),
+            '#top': Node(0, SpecialFunction((), top)),
             '#width': Node(0, SpecialFunction((), width)),
             '#height': Node(0, SpecialFunction((), height)),
         }
@@ -284,7 +333,10 @@ class UI:
 
             i += 1
 
-        return cls(Tree(nodes, []), ui_elements)
+        return cls(Tree.new(nodes, []), ui_elements)
+
+    def build_init(self, max_no_of_loops: int = 10, debug: bool = False,) -> None:
+        self.vals.build_init(max_no_of_loops=max_no_of_loops, debug=debug)
 
     def build(self, max_no_of_loops: int = 10, debug: bool = False,) -> None:
         self.vals.build(max_no_of_loops=max_no_of_loops, debug=debug)
@@ -341,7 +393,7 @@ screen = pg.display.set_mode((500, 500), flags=pg.RESIZABLE)
 
 ui = UI.init(INPUT, lambda : 0, lambda : 0, lambda : pg.display.get_window_size()[0], lambda : pg.display.get_window_size()[1])
 
-ui.build(debug=True)
+ui.build_init(debug=True)
 
 for ui_element in ui.ui_elements:
     print(ui_element.id)
