@@ -83,7 +83,6 @@ class Tree:
 
                 for input_id in node.func.input_ids:
                     if input_id not in built_node_ids:
-                        can_optimise = False
                         continue
 
                 args = []
@@ -107,7 +106,9 @@ class Tree:
 
                     args.append(self.nodes[input_id].val)
                 else: #nobreak
-                    node.val = node.func(*args)
+                    new_val = node.func(*args)
+                    node.was_modified = new_val != node.val
+                    node.val = new_val
                     built_node_ids.append(node_id)
                     if debug:
                         print(f"BUILT {node_id}, NEW_VALUE = {node.val}, INPUTS = {node.func.input_ids}, {args=}")
@@ -286,10 +287,10 @@ class UI:
 
         ui_elements: list[UIElement] = []
         nodes: dict[str, Node] = {
-            '#left': Node(0, SpecialFunction((), left)),
-            '#top': Node(0, SpecialFunction((), top)),
-            '#width': Node(0, SpecialFunction((), width)),
-            '#height': Node(0, SpecialFunction((), height)),
+            '#left': Node(0, SpecialFunction((), left, skip_if_no_input_change=False)),
+            '#top': Node(0, SpecialFunction((), top, skip_if_no_input_change=False)),
+            '#width': Node(0, SpecialFunction((), width, skip_if_no_input_change=False)),
+            '#height': Node(0, SpecialFunction((), height, skip_if_no_input_change=False)),
         }
 
         while i < no_of_tokens:
