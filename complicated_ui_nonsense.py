@@ -11,6 +11,7 @@ class SpecialFunction:
     input_ids: tuple
     func: Callable
     skip_if_no_input_change: bool=True
+    has_no_sideffects: bool=False
 
     def __call__(self, *args) -> Any:
         return self.func(*args)
@@ -26,17 +27,25 @@ class Tree:
     nodes: dict[str, Node]
     outputs: list[SpecialFunction]
     root_ids: list[str]
+    skip_ids: set[str]
 
     @classmethod
     def new(cls, nodes: dict[str, Node], outputs: list[SpecialFunction]):
         root_ids: list[str] = []
+        no_side_effect: set[str] = set()
+        used_node_ids: set[str] = set()
+
         for node_id, node in nodes.items():
-            if node.func.input_ids:
-                continue
+            if not node.func.input_ids:
+                root_ids.append(node_id)
 
-            root_ids.append(node_id)
+            if node.func.has_no_sideffects:
+                no_side_effect.add(node_id)
 
-        return cls(nodes, outputs, root_ids)
+            for input_id in node.func.input_ids:
+                used_node_ids.add(input_id)
+
+        return cls(nodes, outputs, root_ids, no_side_effect.difference(used_node_ids))
 
     def build_init(self, *, max_no_of_loops: int=10, debug: bool=False, **kwargs: Any): 
         return self.build(max_no_of_loops=max_no_of_loops, debug=debug, init=True, **kwargs)
@@ -62,6 +71,11 @@ class Tree:
             done: bool = True
             for node_id, node in self.nodes.items():
                 if node_id in built_node_ids:
+                    continue
+
+                if node_id in self.skip_ids:
+                    if debug:
+                        print(f"SKIPPED {node_id} BECAUSE NO SIDE EFFECT AND NOT USED")
                     continue
 
                 i += 1
@@ -146,16 +160,16 @@ class UIRect(UIElement):
     def get_default_nodes(self) -> list[tuple[str, Node]]:
         nodes = [
             (
-                f'{self.id}#left', Node(self.rect.x, SpecialFunction((), lambda: self.rect.x)),
+                f'{self.id}#left', Node(self.rect.x, SpecialFunction((), lambda: self.rect.x, has_no_sideffects=True)),
             ),
             (
-                f'{self.id}#top', Node(self.rect.right, SpecialFunction((), lambda: self.rect.top)),
+                f'{self.id}#top', Node(self.rect.right, SpecialFunction((), lambda: self.rect.top, has_no_sideffects=True)),
             ),
             (
-                f'{self.id}#width', Node(self.rect.top, SpecialFunction((), lambda: self.rect.w)),
+                f'{self.id}#width', Node(self.rect.top, SpecialFunction((), lambda: self.rect.w, has_no_sideffects=True)),
             ),
             (
-                f'{self.id}#height', Node(self.rect.bottom, SpecialFunction((), lambda: self.rect.h)),
+                f'{self.id}#height', Node(self.rect.bottom, SpecialFunction((), lambda: self.rect.h, has_no_sideffects=True)),
             ),
         ]
 
