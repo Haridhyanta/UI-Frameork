@@ -262,7 +262,7 @@ class UI:
     ui_elements: list[UIElement]
 
     @classmethod
-    def init(cls, definition: str, left: Callable[[], int], top: Callable[[], int], width: Callable[[], int], height: Callable[[], int]) -> Self:
+    def init(cls, definition: str, left: SpecialFunction, top: SpecialFunction, width: SpecialFunction, height: SpecialFunction) -> Self:
         tokens: list[str] = []
         last_token: str = ''
 
@@ -287,10 +287,10 @@ class UI:
 
         ui_elements: list[UIElement] = []
         nodes: dict[str, Node] = {
-            '#left': Node(0, SpecialFunction((), left, skip_if_no_input_change=False)),
-            '#top': Node(0, SpecialFunction((), top, skip_if_no_input_change=False)),
-            '#width': Node(0, SpecialFunction((), width, skip_if_no_input_change=False)),
-            '#height': Node(0, SpecialFunction((), height, skip_if_no_input_change=False)),
+            '#left': Node(0, left),
+            '#top': Node(0, top),
+            '#width': Node(0, width),
+            '#height': Node(0, height),
         }
 
         while i < no_of_tokens:
@@ -406,7 +406,13 @@ pg.init()
 screen = pg.display.set_mode((500, 500), flags=pg.RESIZABLE)
 
 
-ui = UI.init(INPUT, lambda : 0, lambda : 0, lambda : pg.display.get_window_size()[0], lambda : pg.display.get_window_size()[1])
+ui = UI.init(
+    INPUT, 
+    SpecialFunction((), lambda : 0),
+    SpecialFunction((), lambda : 0),
+    SpecialFunction((), lambda : pg.display.get_window_size()[0]),
+    SpecialFunction((), lambda : pg.display.get_window_size()[1])
+)
 
 ui.build_init(debug=True)
 
